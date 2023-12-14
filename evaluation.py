@@ -29,14 +29,16 @@ from langchain.tools.render import render_text_description_and_args, format_tool
 from langchain.agents.format_scratchpad import format_to_openai_function_messages
 from langchain.agents.output_parsers import OpenAIFunctionsAgentOutputParser
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
-
+import pandas as pd
 
 async def run_agent_eval(
     question: str,
     ground_truth_answer: str,
     agent_executor: AgentExecutor,
     evaluator: HuggingFaceChatWrapper,
+    evaluator_name: str,
     eval_prompt_template: ChatPromptTemplate,
+    agent_name: str,
 ) -> dict:
     """
     Runs the agent and evaluation process for a given question and ground truth answer.
@@ -103,10 +105,11 @@ async def run_agent_eval(
     end_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     # collect results
     return {
+        "agent_name": agent_name,
         "agent_model_id": agent_executor.dict()["agent"]["runnable"]["middle"][-1][
             "bound"
         ]["_type"],
-        # "evaluator_model_id": evaluator.model_id,
+        "evaluator_name": evaluator_name,
         "question": question,
         "gt_answer": ground_truth_answer,
         "prediction": out["output"],
@@ -125,8 +128,9 @@ async def evaluate_on_dataset(
     dataset: Dataset,
     agent_executor: AgentExecutor,
     evaluator: HuggingFaceChatWrapper,
+    evaluator_name: str,
     eval_prompt_template: ChatPromptTemplate,
-    agent_model_id: str,
+    agent_name: str,
 ) -> List[Dict[str, Any]]:
     """
     Evaluates the agent on a given dataset.
@@ -144,14 +148,17 @@ async def evaluate_on_dataset(
         exceeded flag, agent error (if any), and example metadata (task).
     """
     try:
-        with open(f'output/{agent_model_id}.json', 'r') as f:
+        with open(f'output/{agent_name}.json', 'r') as f:
             results = json.load(f)
     except FileNotFoundError:
         results = []
+        
+    results_df = pd.DataFrame(results)
 
     for i, example in tqdm(enumerate(dataset), total=len(dataset)):
-        if example["question"] in [r['question'] for r in results]:
-            continue
+        if len(results_df) > 0:
+            if example["question"] in results_df.loc[results_df['evaluator_name']==evaluator_name, 'question'].unique():
+                continue
 
         # run agent and evaluator
         result = await run_agent_eval(
@@ -159,7 +166,9 @@ async def evaluate_on_dataset(
             ground_truth_answer=example["answer"],
             agent_executor=agent_executor,
             evaluator=evaluator,
+            evaluator_name=evaluator_name,
             eval_prompt_template=eval_prompt_template,
+            agent_name=agent_name,
         )
         print(result)
 
@@ -171,7 +180,7 @@ async def evaluate_on_dataset(
         )
         results.append(result)
 
-        with open(f'output/{agent_model_id}.json', 'w') as f:
+        with open(f'output/{agent_name}.json', 'w') as f:
             json.dump(results, f)
     return results
 
@@ -319,6 +328,7 @@ async def run_full_eval(
     dataset: Dataset,
     agents: Dict[str, AgentExecutor],
     evaluator: BaseChatModel,
+    evaluator_name: str,
     eval_prompt_template: ChatPromptTemplate,
 ) -> pd.DataFrame:
     """
@@ -340,10 +350,11 @@ async def run_full_eval(
             dataset=dataset,
             agent_executor=agent_executor,
             evaluator=evaluator,
+            evaluator_name=evaluator_name,
             eval_prompt_template=eval_prompt_template,
-            agent_model_id=agent_model_id,
+            agent_name=agent_name,
         )
-        for agent_model_id, agent_executor in agents.items()
+        for agent_name, agent_executor in agents.items()
     ]
 
     results = await asyncio.gather(*tasks)
