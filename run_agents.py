@@ -80,8 +80,7 @@ def build_hf_agent(hf_endpoint_url: str, tools):
         task="text-generation",
         model_kwargs={
             "max_new_tokens": 512,
-            "top_k": 50,
-            "temperature": 0.1,
+            "do_sample": False,
             "repetition_penalty": 1.03,
         },
     )
