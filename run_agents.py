@@ -1,39 +1,51 @@
 import asyncio
 from datetime import datetime
 from typing import Any, Dict, List, Optional
-
 import json
 import pandas as pd
+from tqdm import tqdm
+
 from datasets import Dataset
-from chat_wrapper import HuggingFaceChatWrapper, BaseChatModel
 from langchain.agents import AgentExecutor, load_tools
-from langchain.agents.format_scratchpad import format_log_to_str
 from langchain.agents.output_parsers import (
     ReActJsonSingleInputOutputParser,
+    OpenAIFunctionsAgentOutputParser
 )
-from langchain.llms import (
-    HuggingFaceEndpoint,
-)
-from langchain.prompts.chat import (
-    ChatPromptTemplate,
-    HumanMessagePromptTemplate,
-)
-from langchain.schema import (
-    SystemMessage,
-)
-from prompts import HUMAN_PROMPT, EVALUATION_PROMPT, SYSTEM_PROMPT
-from tqdm import tqdm
-from langchain.utilities import GoogleSearchAPIWrapper
+from langchain.llms import HuggingFaceEndpoint
 from langchain.chat_models import ChatOpenAI
 from langchain.tools.render import render_text_description_and_args, format_tool_to_openai_function
-from langchain.agents.format_scratchpad import format_to_openai_function_messages
-from langchain.agents.output_parsers import OpenAIFunctionsAgentOutputParser
-from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
-import pandas as pd
+from langchain.agents.format_scratchpad import format_to_openai_function_messages, format_log_to_str
+from langchain.prompts import (
+    ChatPromptTemplate,
+    HumanMessagePromptTemplate,
+    MessagesPlaceholder
+)
+from langchain.tools import WikipediaQueryRun, tool
+from langchain.utilities import WikipediaAPIWrapper
+from chat_wrapper import HuggingFaceChatWrapper, BaseChatModel
+from prompts import HUMAN_PROMPT, SYSTEM_PROMPT
 
 
-def build_openai_agent(tools, model_id: Optional[str] = 'gpt-4-1106-preview'):
+wikipedia = WikipediaQueryRun(api_wrapper=WikipediaAPIWrapper())
+
+@tool
+def search_wikipedia(query: str) -> str:
+    """Searches Wikipedia for a query. This will not be relevant for the latest information, but it can be useful for historical knowledge."""
+    return wikipedia.run(query)
+
+
+def init_tools_with_llm(llm: BaseChatModel) -> List[tool]:
+    tools = load_tools(["serpapi", "llm-math"], llm=llm)
+    # Rename tools in the same format used by other tools
+    tools[0].name = "search"
+    tools[1].name = "calculator"
+    tools.append(search_wikipedia)
+    return tools
+
+
+def build_openai_agent(model_id: Optional[str] = 'gpt-4-1106-preview'):
     llm = ChatOpenAI(model=model_id, temperature=0)
+    tools = init_tools_with_llm(llm)
     llm_with_tools = llm.bind(functions=[format_tool_to_openai_function(t) for t in tools])
     prompt = ChatPromptTemplate.from_messages(
         [
@@ -63,7 +75,7 @@ def build_openai_agent(tools, model_id: Optional[str] = 'gpt-4-1106-preview'):
     )
 
 
-def build_hf_agent(hf_endpoint_url: str, tools):
+def build_hf_agent(hf_endpoint_url: str):
     """
     Build a zero-shot ReAct chat agent from HF endpoint.
 
@@ -86,7 +98,7 @@ def build_hf_agent(hf_endpoint_url: str, tools):
     )
 
     chat_model = HuggingFaceChatWrapper(llm=llm)
-
+    tools = init_tools_with_llm(llm)
     prompt = ChatPromptTemplate.from_messages(
         [
             HumanMessagePromptTemplate.from_template(SYSTEM_PROMPT+'\nSo, here is my question:'+HUMAN_PROMPT),
@@ -144,7 +156,7 @@ async def run_agent(
     start_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     try:
         # run executor agent
-        out = await agent_executor.ainvoke({"input": question})
+        response = await agent_executor.ainvoke({"input": question})
 
         # check for parsing errors which indicate the LLM failed to follow the ReACT format
         # this could be due to an issue with the tool calling format or ReACT formatting (i.e. Thought, Action, Observation, etc.)
@@ -153,7 +165,7 @@ async def run_agent(
             if any(
                 [
                     "Could not parse LLM output" in step[0].log
-                    for step in out["intermediate_steps"]
+                    for step in response["intermediate_steps"]
                 ]
             )
             else False
@@ -162,16 +174,14 @@ async def run_agent(
         # check if iteration limit exceeded
         iteration_limit_exceeded = (
             True
-            if "Agent stopped due to iteration limit or time limit." in out["output"]
+            if "Agent stopped due to iteration limit or time limit." in response["output"]
             else False
         )
         raised_exception = False
 
     except Exception as e:
         print('Error on ', agent_executor, question, e)
-        out = {"output": None, "intermediate_steps": None}
-        score = None
-        feedback = None
+        response = {"output": None, "intermediate_steps": None}
         parsing_error = False
         iteration_limit_exceeded = False
         exception = e
@@ -179,6 +189,10 @@ async def run_agent(
 
     end_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     # collect results
+    if response["intermediate_steps"] is not None:
+        intermediate_steps = [{'tool': response[0].tool, 'tool_input': response[0].tool_input, 'tool_output': response[1]} for response in response["intermediate_steps"]]
+    else:
+        intermediate_steps = None
     return {
         "agent_name": agent_name,
         "agent_model_id": agent_executor.dict()["agent"]["runnable"]["middle"][-1][
@@ -186,8 +200,8 @@ async def run_agent(
         ]["_type"],
         "question": question,
         "gt_answer": ground_truth_answer,
-        "prediction": out["output"],
-        "intermediate_steps": out["intermediate_steps"],
+        "prediction": response["output"],
+        "intermediate_steps": intermediate_steps,
         "parsing_error": parsing_error,
         "iteration_limit_exceeded": iteration_limit_exceeded,
         "agent_error": repr(exception) if raised_exception else None,

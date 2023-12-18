@@ -1,14 +1,8 @@
-import asyncio
-from datetime import datetime
-from typing import Any, Dict, List, Optional
-
 import json
-import pandas as pd
 from chat_wrapper import HuggingFaceChatWrapper
 from langchain.llms import HuggingFaceEndpoint
 from langchain.prompts.chat import ChatPromptTemplate
-from tqdm import tqdm
-import pandas as pd
+from tqdm.notebook import tqdm
 
 
 def build_evaluator(hf_endpoint_url: str) -> tuple:
@@ -26,8 +20,7 @@ def build_evaluator(hf_endpoint_url: str) -> tuple:
         task="text-generation",
         model_kwargs={
             "max_new_tokens": 512,
-            "top_k": 50,
-            "temperature": 0.1,
+            "do_sample": False,
             "repetition_penalty": 1.03,
         },
     )
