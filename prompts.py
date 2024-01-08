@@ -43,7 +43,7 @@ HUMAN_PROMPT = """{input}
 {agent_scratchpad}"""
 
 
-EVALUATION_PROMPT = """###Task Description:
+evaluation_prompt = """###Task Description:
 An instruction (might include an Input inside it), a response to evaluate, a reference answer that gets a score of 5, and a score rubric representing a evaluation criteria are given.
 1. Write a detailed feedback that assess the quality of the response strictly based on the given score rubric, not evaluating in general.
 2. After writing a feedback, write a score that is an integer between 1 and 5. You should refer to the score rubric.
@@ -60,36 +60,18 @@ An instruction (might include an Input inside it), a response to evaluate, a ref
 {reference_answer}
 
 ###Score Rubrics:
-[{criteria_description}]
-Score 1: {score1_description}
-Score 2: {score2_description}
-Score 3: {score3_description}
-Score 4: {score4_description}
-Score 5: {score5_description}
+[Is the response correct, accurate, and factual based on the reference answer?]
+Score 1: The response is completely incorrect, inaccurate, and/or not factual.
+Score 2: The response is mostly incorrect, inaccurate, and/or not factual.
+Score 3: The response is somewhat correct, accurate, and/or factual.
+Score 4: The response is mostly correct, accurate, and factual.
+Score 5: The response is completely correct, accurate, and factual.
 
 ###Feedback:"""
 
-evaluation_prompt_template = ChatPromptTemplate.from_messages(
+EVALUATION_PROMPT_TEMPLATE = ChatPromptTemplate.from_messages(
     [
         SystemMessage(content="You are a fair evaluator language model."),
-        HumanMessagePromptTemplate.from_template(EVALUATION_PROMPT),
+        HumanMessagePromptTemplate.from_template(evaluation_prompt),
     ]
-)
-
-correctness_criteria = {
-    "criteria_description": "Is the response correct, accurate, and factual based on the reference answer?",
-    "score1_description": "The response is completely incorrect, inaccurate, and/or not factual.",
-    "score2_description": "The response is mostly incorrect, inaccurate, and/or not factual.",
-    "score3_description": "The response is somewhat correct, accurate, and/or factual.",
-    "score4_description": "The response is mostly correct, accurate, and factual.",
-    "score5_description": "The response is completely correct, accurate, and factual.",
-}
-
-CORRECTNESS_PROMPT_TEMPLATE = evaluation_prompt_template.partial(
-    criteria_description=correctness_criteria["criteria_description"],
-    score1_description=correctness_criteria["score1_description"],
-    score2_description=correctness_criteria["score2_description"],
-    score3_description=correctness_criteria["score3_description"],
-    score4_description=correctness_criteria["score4_description"],
-    score5_description=correctness_criteria["score5_description"],
 )
