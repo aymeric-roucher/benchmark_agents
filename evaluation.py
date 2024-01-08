@@ -42,24 +42,24 @@ def evaluate_answers(
         eval_prompt_template (ChatPromptTemplate): The template for the evaluation prompt.
     """
 
-    with open(results_path, 'r') as f:
+    with open(results_path, "r") as f:
         results = json.load(f)
 
     for experiment in tqdm(results):
-        if f'eval_score_{evaluator_name}' in experiment:
+        if f"eval_score_{evaluator_name}" in experiment:
             continue
 
         eval_prompt = eval_prompt_template.format_messages(
-            instruction=experiment['question'],
-            response=experiment['prediction'],
+            instruction=experiment["question"],
+            response=experiment["prediction"],
             reference_answer=experiment["gt_answer"],
         )
         eval_result = evaluator.invoke(eval_prompt)
         feedback, score = [
             item.strip() for item in eval_result.content.split("[RESULT]")
         ]
-        experiment[f'eval_score_{evaluator_name}'] = score
-        experiment[f'eval_feedback_{evaluator_name}'] = feedback
+        experiment[f"eval_score_{evaluator_name}"] = score
+        experiment[f"eval_feedback_{evaluator_name}"] = feedback
 
-        with open(results_path, 'w') as f:
+        with open(results_path, "w") as f:
             json.dump(results, f)
