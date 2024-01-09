@@ -125,6 +125,8 @@ async def answer_questions(
         if len(results_df) > 0:
             if example["question"] in results_df["question"].unique():
                 continue
+            else:
+                print("not found")
 
         # run agent
         result = await run_agent(
