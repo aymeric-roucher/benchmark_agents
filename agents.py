@@ -31,7 +31,9 @@ from langchain.schema import (
 
 from jinja2.exceptions import TemplateError
 
-from chat_wrapper import HuggingFaceChatWrapper, BaseChatModel
+from langchain.chat_models.base import BaseChatModel
+from langchain_community.chat_models.huggingface import ChatHuggingFace
+
 from prompts import HUMAN_PROMPT, SYSTEM_PROMPT
 
 wikipedia = WikipediaQueryRun(api_wrapper=WikipediaAPIWrapper())
@@ -108,7 +110,7 @@ def build_hf_agent(hf_endpoint_url: str, no_system_prompt=False):
         },
     )
 
-    chat_model = HuggingFaceChatWrapper(llm=llm)
+    chat_model = ChatHuggingFace(llm=llm)
     tools = init_tools_with_llm(llm)
 
     # define the prompt depending on whether the chat model supports system prompts
