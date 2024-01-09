@@ -48,7 +48,7 @@ def init_tools_with_llm(llm: BaseChatModel) -> List[tool]:
     # Rename tools in the same format used by other tools
     tools[0].name = "search"
     tools[1].name = "calculator"
-    tools.append(search_wikipedia)
+    # tools.append(search_wikipedia)
     return tools
 
 
