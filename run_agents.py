@@ -57,7 +57,7 @@ async def run_agent(
         raised_exception = False
 
     except Exception as e:
-        print("Error on ", agent_executor, question, e)
+        print("Error on ", question, e)
         response = {"output": None, "intermediate_steps": None}
         parsing_error = False
         iteration_limit_exceeded = False
