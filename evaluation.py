@@ -20,7 +20,7 @@ def build_evaluator(hf_endpoint_url: str) -> tuple:
         endpoint_url=hf_endpoint_url,
         task="text-generation",
         model_kwargs={
-            "max_new_tokens": 512,
+            "max_new_tokens": 488,
             "do_sample": False,
             "repetition_penalty": 1.03,
         },
@@ -75,6 +75,7 @@ def evaluate_answers_huggingface(
         try:
             feedback, score = [item.strip() for item in eval_result.split("[RESULT]")]
         except:
+            print(eval_result)
             # Split the string by '[RESULT]' and filter out empty segments
             segments = [
                 segment.strip()
