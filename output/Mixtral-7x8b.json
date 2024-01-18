@@ -1384,6 +1384,7 @@
         "start_time": "2024-01-09 10:52:24",
         "end_time": "2024-01-09 10:53:01",
         "task": "GAIA",
+        "eval_score_human": "4",
         "eval_score_GPT4": "5",
         "eval_feedback_GPT4": "Feedback: The response provided is completely correct, accurate, and factual. It matches the reference answer by stating \"St. Petersburg,\" which is an acceptable variation of \"Saint Petersburg.\" The additional information about the Zoological Institute's location is not required but does not detract from the correctness of the city name provided.",
         "eval_score_Prometheus-13B-v1.0": "4",
