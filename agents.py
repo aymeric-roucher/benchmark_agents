@@ -19,47 +19,45 @@ from langchain.prompts import (
     ChatPromptTemplate,
     HumanMessagePromptTemplate,
     SystemMessagePromptTemplate,
+    AIMessagePromptTemplate,
     MessagesPlaceholder,
 )
-from langchain.tools import WikipediaQueryRun, tool
-from langchain.utilities import WikipediaAPIWrapper
+from langchain.tools import tool
 from langchain.agents import AgentExecutor, load_tools
 from langchain.schema import (
     HumanMessage,
     SystemMessage,
 )
 
-from jinja2.exceptions import TemplateError
-
 from langchain.chat_models.base import BaseChatModel
 from langchain_community.chat_models.huggingface import ChatHuggingFace
 
-from prompts import HUMAN_PROMPT, SYSTEM_PROMPT
+from prompts import HUMAN_PROMPT, SYSTEM_PROMPT, SCRATCHPAD_PROMPT
 
-wikipedia = WikipediaQueryRun(api_wrapper=WikipediaAPIWrapper())
+from langchain_core.tools import Tool
 
-
-@tool
-def search_wikipedia(query: str) -> str:
-    """Searches Wikipedia for a query. This will not be relevant for the latest information, but it can be useful for historical knowledge."""
-    return wikipedia.run(query)
+from modified_calculator import LLMMathChain
 
 
 def init_tools_with_llm(llm: BaseChatModel) -> List[tool]:
-    tools = load_tools(["serpapi", "llm-math"], llm=llm)
+    tools = load_tools(["serpapi"], llm=llm)
     # Rename tools in the same format used by other tools
     tools[0].name = "search"
+    llm_math_tool = Tool(
+        name="Calculator",
+        description="Useful for when you need to answer questions about math.",
+        func=LLMMathChain.from_llm(llm=llm).run,
+        coroutine=LLMMathChain.from_llm(llm=llm).arun,
+    )
+    tools.append(llm_math_tool)
     tools[1].name = "calculator"
-    # tools.append(search_wikipedia)
     return tools
 
 
 def build_openai_agent(model_id: Optional[str] = "gpt-4-1106-preview"):
     llm = ChatOpenAI(model=model_id, temperature=0)
     tools = init_tools_with_llm(llm)
-    llm_with_tools = llm.bind(
-        functions=[format_tool_to_openai_function(t) for t in tools]
-    )
+    llm_with_tools = llm.bind(functions=[format_tool_to_openai_function(t) for t in tools])
     prompt = ChatPromptTemplate.from_messages(
         [
             ("system", "You are a helpful assistant"),
@@ -121,6 +119,7 @@ def build_hf_agent(hf_endpoint_url: str, no_system_prompt=False):
             [
                 SystemMessagePromptTemplate.from_template(SYSTEM_PROMPT),
                 HumanMessagePromptTemplate.from_template(HUMAN_PROMPT),
+                SystemMessagePromptTemplate.from_template(SCRATCHPAD_PROMPT),
             ]
         )
     else:
@@ -129,11 +128,13 @@ def build_hf_agent(hf_endpoint_url: str, no_system_prompt=False):
                 HumanMessagePromptTemplate.from_template(
                     SYSTEM_PROMPT + "\nSo, here is my question:" + HUMAN_PROMPT
                 ),
+                AIMessagePromptTemplate.from_template(SCRATCHPAD_PROMPT),
+                HumanMessage(content="Now give your next thoughts: "),
             ]
         )
 
     prompt = prompt.partial(
-        tool_description=render_text_description_and_args(tools),
+        tool_description_with_args=render_text_description_and_args(tools),
         tool_names=", ".join([t.name for t in tools]),
     )
 
@@ -169,14 +170,18 @@ def check_supports_system_prompt(chat_model):
     Returns:
         True if the chat model supports system prompts, False otherwise.
     """
-    messages = [
-        SystemMessage(content="You're a helpful assistant"),
-        HumanMessage(
-            content="What happens when an unstoppable force meets an immovable object?"
-        ),
-    ]
+    messages = ChatPromptTemplate.from_messages(
+        [
+            SystemMessagePromptTemplate.from_template(SYSTEM_PROMPT),
+            HumanMessagePromptTemplate.from_template(HUMAN_PROMPT),
+            SystemMessagePromptTemplate.from_template(SCRATCHPAD_PROMPT),
+        ]
+    )
     try:
         chat_model._to_chat_prompt(messages)
+        print("System prompt supported")
         return True
-    except TemplateError:
+    except Exception as e:
+        print(e)
+        print("System prompt not supported")
         return False
