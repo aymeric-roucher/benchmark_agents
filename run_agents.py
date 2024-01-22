@@ -50,8 +50,7 @@ async def run_agent(
         # check if iteration limit exceeded
         iteration_limit_exceeded = (
             True
-            if "Agent stopped due to iteration limit or time limit."
-            in response["output"]
+            if "Agent stopped due to iteration limit or time limit." in response["output"]
             else False
         )
         raised_exception = False
@@ -79,9 +78,9 @@ async def run_agent(
         intermediate_steps = None
     return {
         "agent_name": agent_name,
-        "agent_model_id": agent_executor.dict()["agent"]["runnable"]["middle"][-1][
-            "bound"
-        ]["_type"],
+        "agent_model_id": agent_executor.dict()["agent"]["runnable"]["middle"][-1]["bound"][
+            "_type"
+        ],
         "question": question,
         "gt_answer": ground_truth_answer,
         "prediction": response["output"],
@@ -125,8 +124,6 @@ async def answer_questions(
         if len(results_df) > 0:
             if example["question"] in results_df["question"].unique():
                 continue
-            else:
-                print("not found")
 
         # run agent
         result = await run_agent(
