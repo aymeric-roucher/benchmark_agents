@@ -22,24 +22,17 @@ from langchain.prompts import (
     AIMessagePromptTemplate,
     MessagesPlaceholder,
 )
-from langchain.tools import tool
 from langchain.agents import AgentExecutor, load_tools
-from langchain.schema import (
-    HumanMessage,
-    SystemMessage,
-)
-
+from langchain.schema import HumanMessage
 from langchain.chat_models.base import BaseChatModel
 from langchain_community.chat_models.huggingface import ChatHuggingFace
-
-from prompts import HUMAN_PROMPT, SYSTEM_PROMPT, SCRATCHPAD_PROMPT
-
 from langchain_core.tools import Tool
 
-from modified_calculator import LLMMathChain
+from scripts.prompts import HUMAN_PROMPT, SYSTEM_PROMPT, SCRATCHPAD_PROMPT
+from scripts.modified_calculator import LLMMathChain
 
 
-def init_tools_with_llm(llm: BaseChatModel) -> List[tool]:
+def init_tools_with_llm(llm: BaseChatModel) -> List[Tool]:
     tools = load_tools(["serpapi"], llm=llm)
     # Rename tools in the same format used by other tools
     tools[0].name = "search"
