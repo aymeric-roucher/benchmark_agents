@@ -1,6 +1,6 @@
 import asyncio
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Callable
 import json
 import pandas as pd
 from tqdm import tqdm
@@ -9,14 +9,19 @@ from datasets import Dataset
 from langchain.agents import AgentExecutor
 
 
+def call_langchain_agent(agent: AgentExecutor, question: str) -> str:
+    return agent.ainvoke({"input": question})
+
+
 async def run_agent(
     question: str,
     ground_truth_answer: str,
     agent_executor: AgentExecutor,
     agent_name: str,
+    agent_call_function: Callable,
 ) -> dict:
     """
-    Runs the execution and evaluation process for a given question and ground truth answer.
+    Runs the execution process for a given question and ground truth answer.
 
     Args:
         question (str): The input question to be evaluated.
@@ -32,7 +37,7 @@ async def run_agent(
     start_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     try:
         # run executor agent
-        response = await agent_executor.ainvoke({"input": question})
+        response = await agent_call_function(agent_executor, question)
 
         # check for parsing errors which indicate the LLM failed to follow the ReACT format
         # this could be due to an issue with the tool calling format or ReACT formatting (i.e. Thought, Action, Observation, etc.)
@@ -78,9 +83,6 @@ async def run_agent(
         intermediate_steps = None
     return {
         "agent_name": agent_name,
-        "agent_model_id": agent_executor.dict()["agent"]["runnable"]["middle"][-1]["bound"][
-            "_type"
-        ],
         "question": question,
         "gt_answer": ground_truth_answer,
         "prediction": response["output"],
@@ -97,6 +99,8 @@ async def answer_questions(
     dataset: Dataset,
     agent_executor: AgentExecutor,
     agent_name: str,
+    output_folder: str = "output",
+    agent_call_function: Callable = call_langchain_agent,
 ) -> List[Dict[str, Any]]:
     """
     Evaluates the agent on a given dataset.
@@ -113,7 +117,7 @@ async def answer_questions(
         exceeded flag, agent error (if any), and example metadata (task).
     """
     try:
-        with open(f"output/{agent_name}.json", "r") as f:
+        with open(f"{output_folder}/{agent_name}.json", "r") as f:
             results = json.load(f)
     except FileNotFoundError:
         results = []
@@ -131,9 +135,8 @@ async def answer_questions(
             ground_truth_answer=example["answer"],
             agent_executor=agent_executor,
             agent_name=agent_name,
+            agent_call_function=agent_call_function,
         )
-        print("Result:", result)
-        print("True answer:", example["answer"])
 
         # add in example metadata
         result.update(
@@ -143,7 +146,7 @@ async def answer_questions(
         )
         results.append(result)
 
-        with open(f"output/{agent_name}.json", "w") as f:
+        with open(f"{output_folder}/{agent_name}.json", "w") as f:
             json.dump(results, f)
     return results
 

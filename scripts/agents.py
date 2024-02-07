@@ -48,12 +48,12 @@ def init_tools_with_llm(llm: BaseChatModel) -> List[Tool]:
 
 
 def build_openai_agent(model_id: Optional[str] = "gpt-4-1106-preview"):
-    llm = ChatOpenAI(model=model_id, temperature=0)
+    llm = ChatOpenAI(model=model_id, temperature=0.1)
     tools = init_tools_with_llm(llm)
     llm_with_tools = llm.bind(functions=[format_tool_to_openai_function(t) for t in tools])
     prompt = ChatPromptTemplate.from_messages(
         [
-            ("system", "You are a helpful assistant"),
+            ("system", "You are a helpful assistant. Answer the following question:"),
             ("user", "{input}"),
             MessagesPlaceholder(variable_name="agent_scratchpad"),
         ]
