@@ -52,6 +52,11 @@ def build_openai_agent(model_id: Optional[str] = "gpt-4-1106-preview") -> AgentE
     tools = init_tools_with_llm(llm)
 
 
+    print('Removing search')
+    # TODO: remove me
+    tools = [tools[1]]
+
+
     llm_with_tools = llm.bind(functions=[format_tool_to_openai_function(t) for t in tools])
     prompt = ChatPromptTemplate.from_messages(
         [
