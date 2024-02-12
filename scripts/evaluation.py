@@ -1,15 +1,16 @@
 import json
 from langchain.llms import HuggingFaceEndpoint
 from langchain.prompts.chat import ChatPromptTemplate
-from langchain_community.chat_models.huggingface import ChatHuggingFace
-from langchain.chat_models import ChatOpenAI
 import pandas as pd
 import asyncio
-from scripts.run_agents import run_agent
 from typing import Dict, Optional, Any, Tuple, List
-from langchain.agents import AgentExecutor
 import tqdm.asyncio
 import numpy as np
+from threading import Thread
+from queue import Queue
+import os
+
+_SENTINEL_KILL_CONSUMERS = object()
 
 
 def build_evaluator(hf_endpoint_url: str) -> tuple:
@@ -35,7 +36,7 @@ def build_evaluator(hf_endpoint_url: str) -> tuple:
 
 
 async def evaluate_single_example(
-    example: dict, evaluator, eval_prompt_template, evaluator_name, eval_split_string="[RESULT]"
+    example: dict, evaluator, eval_prompt_template, evaluator_name, eval_split_string="[RESULT]", writer_queue: Optional[Queue] = None
 ):
     if f"eval_score_{evaluator_name}" in example:
         try:
@@ -49,6 +50,7 @@ async def evaluate_single_example(
         response=example["prediction"],
         reference_answer=example["gt_answer"],
     )
+    print("Evaluating example")
     eval_result = await evaluator.ainvoke(eval_prompt)
     eval_result = eval_result.content
     try:
@@ -65,6 +67,8 @@ async def evaluate_single_example(
                 score = int(segment)
     example[f"eval_score_{evaluator_name}"] = score
     example[f"eval_feedback_{evaluator_name}"] = feedback
+    if writer_queue:
+        writer_queue.put(example)
     return example
 
 
@@ -74,10 +78,12 @@ async def evaluate_answers(
     evaluator_name: str,
     eval_prompt_template: ChatPromptTemplate,
     eval_split_string: str = "[RESULT]",
-    output_file: Optional[str] = None,
+    output_file_path: Optional[str] = None,
 ) -> pd.DataFrame:
     """
     Run a full evaluation on the given dataset using multiple agent models.
+    Uses safe writing in multithreading, from options suggested here:
+    https://stackoverflow.com/questions/33107019/multiple-threads-writing-to-the-same-csv-in-python
 
     Args:
         dataset (Dataset): The dataset to test on.
@@ -86,21 +92,54 @@ async def evaluate_answers(
     Returns:
         pd.DataFrame: The evaluation results as a pandas DataFrame.
     """
+    previous_evaluations = []
+    if output_file_path and os.path.isfile(output_file_path):
+        previous_evaluations = pd.read_json(output_file_path, lines=True)
+        if f"eval_score_{evaluator_name}" in previous_evaluations.columns:
+            previous_evaluations = previous_evaluations.loc[previous_evaluations[f"eval_score_{evaluator_name}"].notna()]
+            print('Previous evaluations:')
+            
+            examples = [example for example in examples if not len(previous_evaluations.loc[
+                (previous_evaluations["question"] == example["question"]) & (previous_evaluations["agent_name"] == example["agent_name"])
+            ]) > 0]
 
-    tasks = [
-        evaluate_single_example(
-            example,
-            evaluator,
-            eval_prompt_template,
-            evaluator_name,
-            eval_split_string,
-        )
-        for example in examples
-    ]
+    print(f"Launching evaluation for {len(examples)} examples...")
 
-    evaluation_results = [await f for f in tqdm.tqdm(asyncio.as_completed(tasks), total=len(tasks))]
-    if output_file:
-        with open(output_file, "w") as f:
-            json.dump(evaluation_results, f)
+    writer_queue = Queue()
+
+    with open(output_file_path, "a") as output_file:
+        def write_line():
+            while True:
+                if not writer_queue.empty():
+                    annotated_example = writer_queue.get()
+                    
+                    if annotated_example is _SENTINEL_KILL_CONSUMERS:
+                        writer_queue.put(_SENTINEL_KILL_CONSUMERS) # put it back so that other consumers see it
+                        return
+                    
+                    annotated_example = {k: str(v) for k, v in annotated_example.items()}
+
+                    # Row comes out of writer_queue; JSON writing goes here
+                    json.dump(annotated_example, output_file)
+                    output_file.write('\n')
+        
+        consumer = Thread(target=write_line)
+        consumer.setDaemon(True)
+        consumer.start()
+
+        tasks = [
+            evaluate_single_example(
+                example,
+                evaluator,
+                eval_prompt_template,
+                evaluator_name,
+                eval_split_string,
+                writer_queue,
+            )
+            for example in examples
+        ]
+
+        evaluation_results = [await f for f in tqdm.tqdm(asyncio.as_completed(tasks), total=len(tasks))]
+        writer_queue.put(_SENTINEL_KILL_CONSUMERS)
 
     return evaluation_results

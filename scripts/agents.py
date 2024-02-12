@@ -47,9 +47,11 @@ def init_tools_with_llm(llm: BaseChatModel) -> List[Tool]:
     return tools
 
 
-def build_openai_agent(model_id: Optional[str] = "gpt-4-1106-preview"):
+def build_openai_agent(model_id: Optional[str] = "gpt-4-1106-preview") -> AgentExecutor:
     llm = ChatOpenAI(model=model_id, temperature=0.1)
     tools = init_tools_with_llm(llm)
+
+
     llm_with_tools = llm.bind(functions=[format_tool_to_openai_function(t) for t in tools])
     prompt = ChatPromptTemplate.from_messages(
         [
@@ -79,7 +81,7 @@ def build_openai_agent(model_id: Optional[str] = "gpt-4-1106-preview"):
     )
 
 
-def build_hf_agent(hf_endpoint_url: str, no_system_prompt=False):
+def build_hf_agent(hf_endpoint_url: Optional[str] = None, repo_id: Optional[str] = None) -> AgentExecutor:
     """
     Build a zero-shot ReAct chat agent from HF endpoint.
 
@@ -90,19 +92,33 @@ def build_hf_agent(hf_endpoint_url: str, no_system_prompt=False):
         AgentExecutor: An agent executor object that can be used to run the agent.
 
     """
+    assert hf_endpoint_url or repo_id, "hf_endpoint_url or repo_id must be provided."
+    assert not (hf_endpoint_url and repo_id), "Only one of hf_endpoint_url or repo_id can be provided."
+
     # instantiate LLM and chat model
-    llm = HuggingFaceEndpoint(
-        endpoint_url=hf_endpoint_url,
-        task="text-generation",
-        model_kwargs={
-            "max_new_tokens": 512,
-            "do_sample": False,
-            "repetition_penalty": 1.03,
-        },
-    )
+    if hf_endpoint_url:
+        llm = HuggingFaceEndpoint(
+            endpoint_url=hf_endpoint_url,
+            task="text-generation",
+            max_new_tokens= 512,
+            do_sample= False,
+            repetition_penalty= 1.03,
+        )
+    else:
+        llm = HuggingFaceEndpoint(
+            repo_id=repo_id,
+            task="text-generation",
+            max_new_tokens= 512,
+            do_sample= False,
+            repetition_penalty= 1.03,
+        )
 
     chat_model = ChatHuggingFace(llm=llm)
     tools = init_tools_with_llm(llm)
+
+    print('Removing search')
+    # TODO: remove me
+    tools = [tools[1]]
 
     # define the prompt depending on whether the chat model supports system prompts
     system_prompt_supported = check_supports_system_prompt(chat_model)
