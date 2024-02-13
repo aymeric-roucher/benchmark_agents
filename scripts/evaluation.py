@@ -9,6 +9,8 @@ import numpy as np
 from threading import Thread
 from queue import Queue
 import os
+import re
+
 
 _SENTINEL_KILL_CONSUMERS = object()
 
@@ -144,3 +146,20 @@ async def evaluate_answers(
         writer_queue.put(_SENTINEL_KILL_CONSUMERS)
 
     return evaluation_results
+
+
+def extract_number(string):
+    try:
+        found_strings = [el.strip() for el in re.findall(r"(?:[,\d]+.?\d*)", string)]
+
+        found_strings = [
+            "".join(ch for ch in el if (ch.isalnum() or ch == "."))
+            for el in found_strings
+            if el[0].isdigit() or el[0] == "."
+        ]
+        found_strings = [el for el in found_strings if len(el) > 0]
+
+        found_string = found_strings[-1]
+        return float(found_string)
+    except Exception as e:
+        return 0
