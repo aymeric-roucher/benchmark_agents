@@ -162,4 +162,5 @@ def extract_number(string):
         found_string = found_strings[-1]
         return float(found_string)
     except Exception as e:
+        print("Error when extracting string:", e)
         return 0
