@@ -1,16 +1,16 @@
+import os
+import re
 import json
 from langchain.llms import HuggingFaceEndpoint
 from langchain.prompts.chat import ChatPromptTemplate
 import pandas as pd
 import asyncio
-from typing import Dict, Optional, Any, Tuple, List
+from typing import Optional, List
 import tqdm.asyncio
 import numpy as np
 from threading import Thread
 from queue import Queue
-import os
-import re
-
+import datasets
 
 _SENTINEL_KILL_CONSUMERS = object()
 
@@ -94,7 +94,6 @@ async def evaluate_answers(
     Returns:
         pd.DataFrame: The evaluation results as a pandas DataFrame.
     """
-    previous_evaluations = []
     if output_file_path and os.path.isfile(output_file_path):
         previous_evaluations = pd.read_json(output_file_path, lines=True)
         if f"eval_score_{evaluator_name}" in previous_evaluations.columns:
@@ -106,7 +105,6 @@ async def evaluate_answers(
             ]) > 0]
 
     print(f"Launching evaluation for {len(examples)} examples...")
-
 
     writer_queue = Queue()
 
@@ -164,3 +162,25 @@ def extract_number(string):
     except Exception as e:
         print("Error when extracting string:", e)
         return 0
+
+
+def split_answer(row):
+    splitted = row["answer"].split("####")
+    row["true_reasoning"] = splitted[0]
+    row["true_answer"] = float(splitted[1].strip())
+    return row
+
+
+def load_math_datasets():
+    math_dataset = (
+        datasets.load_dataset("gsm8k", "main")["train"].shuffle(seed=42).select(range(100))
+    )
+    math_dataset = pd.DataFrame(math_dataset)
+
+    math_dataset = math_dataset.apply(split_answer, axis=1)
+    math_dataset = math_dataset.drop(columns=["answer"])
+    math_dataset = datasets.Dataset.from_pandas(math_dataset)
+
+    eval_dataset = math_dataset.select(range(30))
+    fewshot_dataset = math_dataset.select(range(10))
+    return eval_dataset, fewshot_dataset

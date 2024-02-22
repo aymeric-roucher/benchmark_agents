@@ -33,28 +33,24 @@ from scripts.modified_calculator import LLMMathChain
 
 
 def init_tools_with_llm(llm: BaseChatModel) -> List[Tool]:
-    tools = load_tools(["serpapi"], llm=llm)
+    tools = load_tools(["serpapi", "llm-math"], llm=llm)
     # Rename tools in the same format used by other tools
     tools[0].name = "search"
-    llm_math_tool = Tool(
-        name="Calculator",
-        description="Useful for when you need to answer questions about math.",
-        func=LLMMathChain.from_llm(llm=llm).run,
-        coroutine=LLMMathChain.from_llm(llm=llm).arun,
-    )
-    tools.append(llm_math_tool)
+    # llm_math_tool = Tool(
+    #     name="Calculator",
+    #     description="Useful for when you need to answer questions about math.",
+    #     func=LLMMathChain.from_llm(llm=llm).run,
+    #     coroutine=LLMMathChain.from_llm(llm=llm).arun,
+    # )
+    # tools.append(llm_math_tool)
     tools[1].name = "calculator"
+    tools = [tools[1]]
     return tools
 
 
-def build_openai_agent(model_id: Optional[str] = "gpt-4-1106-preview") -> AgentExecutor:
+def build_openai_agent_with_tools(model_id: Optional[str] = "gpt-4-1106-preview") -> AgentExecutor:
     llm = ChatOpenAI(model=model_id, temperature=0.1)
     tools = init_tools_with_llm(llm)
-
-
-    print('Removing search')
-    # TODO: remove me
-    tools = [tools[1]]
 
 
     llm_with_tools = llm.bind(functions=[format_tool_to_openai_function(t) for t in tools])
@@ -86,7 +82,7 @@ def build_openai_agent(model_id: Optional[str] = "gpt-4-1106-preview") -> AgentE
     )
 
 
-def build_hf_agent(hf_endpoint_url: Optional[str] = None, repo_id: Optional[str] = None) -> AgentExecutor:
+def build_hf_agent_with_tools(hf_endpoint_url: Optional[str] = None, repo_id: Optional[str] = None) -> AgentExecutor:
     """
     Build a zero-shot ReAct chat agent from HF endpoint.
 
@@ -121,9 +117,9 @@ def build_hf_agent(hf_endpoint_url: Optional[str] = None, repo_id: Optional[str]
     chat_model = ChatHuggingFace(llm=llm)
     tools = init_tools_with_llm(llm)
 
-    print('Removing search')
-    # TODO: remove me
-    tools = [tools[1]]
+    # # TODO: remove
+    # tools = [tools[1]] # only use calculator for now
+
 
     # define the prompt depending on whether the chat model supports system prompts
     system_prompt_supported = check_supports_system_prompt(chat_model)

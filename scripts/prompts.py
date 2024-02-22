@@ -6,7 +6,7 @@ SYSTEM_PROMPT = """Answer the following questions as best you can. You have acce
 {tool_description_with_args}
 
 The way you use the tools is by specifying a json blob.
-Specifically, this json should have a `action` key (with the name of the tool to use) and a `action_input` key (with the input to the tool going here).
+Specifically, this json should have a `action` key (name of the tool to use) and a `action_input` key (input to the tool).
 
 The only values that should be in the "action" field are: {tool_names}
 
@@ -20,26 +20,31 @@ The $JSON_BLOB should only contain a SINGLE action and MUST be formatted as mark
 ```
 Make sure to have the $INPUT in the right format for the tool you are using, and do not put variable names as input if you can find the right values.
 
-ALWAYS use the following format:
+You will be given:
 
 Question: the input question you must answer
-Thought: you should always think about one action to take. Only one action at a time in this format:
+
+You should ALWAYS use the following format:
+
+Thought: you should always think about one action to take. Then use the action as follows:
 Action:
 ```
 $JSON_BLOB
 ```
 Observation: the result of the action
-... (this Thought/Action/Observation can repeat N times, you should take several steps when needed. The $JSON_BLOB must be formatted as markdown and only use a SINGLE action at a time.)
+... (this Thought/Action/Observation can repeat N times, you should take several steps when needed. The $JSON_BLOB must only use a SINGLE action at a time.)
 
 You must always end your output with the following format:
 
-Thought: I now know the final answer
+Thought: I now know the final answer.
 Final Answer: the final answer to the original input question
 
-Now begin! Reminder to ALWAYS use the exact characters `Final Answer:` when you provide a definitive answer. """
+ALWAYS use the exact characters `Final Answer:` when you provide a definitive answer, and provide no additional explanations in the final answer: only the answer. MAKE SURE TO PROVIDE ONLY ONE ANSWER IN THE PROPER UNIT.
+
+Now begin! """
 
 
-HUMAN_PROMPT = "{input}"
+HUMAN_PROMPT = "Question: {input}"
 
 SCRATCHPAD_PROMPT = "{agent_scratchpad}"
 
